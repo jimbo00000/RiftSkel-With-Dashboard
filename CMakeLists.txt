@@ -1,5 +1,5 @@
 CMAKE_MINIMUM_REQUIRED( VERSION 2.6 )
-PROJECT( RiftSkeleton )
+PROJECT( RiftSkel-With-Dashboard )
 
 INCLUDE(cmake_modules/InvokePython.cmake)
 INVOKEPYTHON( "tools/hardcode_shaders.py" )
