@@ -939,6 +939,8 @@ int main(int argc, char** argv)
         TwRefreshBar(g_pTweakbar);
 #endif
 
+        g_app.pre_render_pass();
+
         displayToHMD();
 
 #ifndef _LINUX

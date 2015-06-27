@@ -21,6 +21,7 @@
 AppSkeleton::AppSkeleton()
 : m_scene()
 , m_hydraScene()
+, m_dashScene()
 #ifdef USE_OCULUSSDK
 , m_ovrScene()
 #endif
@@ -53,12 +54,14 @@ AppSkeleton::AppSkeleton()
     // take a little bit more work.
     m_scenes.push_back(&m_scene);
     m_scenes.push_back(&m_hydraScene);
+    m_scenes.push_back(&m_dashScene);
 #ifdef USE_OCULUSSDK
     m_scenes.push_back(&m_ovrScene);
 #endif
 
     // Give this scene a pointer to get live Hydra data for display
     m_hydraScene.SetFlyingMousePointer(&m_fm);
+    m_dashScene.SetFlyingMousePointer(&m_fm);
 
     ResetChassisTransformations();
 }
@@ -220,6 +223,13 @@ void AppSkeleton::_checkSceneIntersections(glm::vec3 origin, glm::vec3 dir)
     }
 }
 
+///@brief For any scene-internal render passes, we call here to perform
+/// only the required one time, rather than twice as in stereo rendering.
+void AppSkeleton::pre_render_pass() const
+{
+    m_dashScene.RenderPrePass();
+}
+
 void AppSkeleton::_drawSceneMono() const
 {
     _resetGLState();
@@ -282,17 +292,6 @@ void AppSkeleton::display_buffered(bool setViewport) const
 
 void AppSkeleton::timestep(double absTime, double dt)
 {
-    for (std::vector<IScene*>::iterator it = m_scenes.begin();
-        it != m_scenes.end();
-        ++it)
-    {
-        IScene* pScene = *it;
-        if (pScene != NULL)
-        {
-            pScene->timestep(absTime, dt);
-        }
-    }
-
     glm::vec3 hydraMove = glm::vec3(0.0f, 0.0f, 0.0f);
 #ifdef USE_SIXENSE
     const sixenseAllControllerData& state = m_fm.GetCurrentState();
@@ -320,6 +319,21 @@ void AppSkeleton::timestep(double absTime, double dt)
     {
         DismissHealthAndSafetyWarning();
     }
+
+    // Dashboard interaction
+    if (m_fm.WasJustPressed(FlyingMouse::Right, SIXENSE_BUTTON_BUMPER))
+    {
+        m_dashScene.m_bDraw = !m_dashScene.m_bDraw;
+        m_dashScene.ResizeTweakbar();
+    }
+    if (m_fm.WasJustPressed(FlyingMouse::Right, SIXENSE_BUTTON_2))
+    {
+        m_dashScene.SetHoldingFlag(1);
+    }
+    if (m_fm.WasJustReleased(FlyingMouse::Right, SIXENSE_BUTTON_2))
+    {
+        m_dashScene.SetHoldingFlag(0);
+    }
 #endif
 
     // Move in the direction the viewer is facing.
@@ -345,6 +359,17 @@ void AppSkeleton::timestep(double absTime, double dt)
         dir3 = glm::vec3(chasMat * glm::vec4(dir3, 0.f));
 
         _checkSceneIntersections(origin3, dir3);
+    }
+
+    for (std::vector<IScene*>::iterator it = m_scenes.begin();
+        it != m_scenes.end();
+        ++it)
+    {
+        IScene* pScene = *it;
+        if (pScene != NULL)
+        {
+            pScene->timestep(absTime, dt);
+        }
     }
 }
 

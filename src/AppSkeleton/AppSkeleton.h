@@ -15,6 +15,7 @@
 #include "FBO.h"
 #include "Scene.h"
 #include "HydraScene.h"
+#include "DashboardScene.h"
 
 #ifdef USE_OCULUSSDK
 #include "OVRScene.h"
@@ -33,6 +34,8 @@ public:
     void ResetChassisTransformations();
     void initGL();
     void _DrawScenes(const float* pMvWorld, const float* pPersp, const float* pMvLocal=NULL) const;
+
+    void pre_render_pass() const;
     void display_raw() const;
     void display_buffered(bool setViewport=true) const;
     virtual void timestep(double absTime, double dt);
@@ -59,6 +62,7 @@ public:
     // This public section is for exposing state variables to AntTweakBar
     Scene m_scene;
     HydraScene m_hydraScene;
+    DashboardScene m_dashScene;
 
 #ifdef USE_OCULUSSDK
     OVRScene m_ovrScene;
