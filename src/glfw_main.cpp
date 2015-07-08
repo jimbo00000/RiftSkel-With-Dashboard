@@ -395,6 +395,20 @@ void mouseDown(GLFWwindow* pWindow, int button, int action, int mods)
         which_button = -1;
     }
     g_app.OnMouseButton(button, action);
+
+    if (action == GLFW_PRESS)
+    {
+        g_app.DismissHealthAndSafetyWarning();
+    }
+
+    DashboardScene& dash = g_app.m_dashScene;
+    if ((action==GLFW_PRESS)&&(button==GLFW_MOUSE_BUTTON_MIDDLE))
+    {
+        dash.m_bDraw = !dash.m_bDraw;
+    }
+
+    if      ((button==GLFW_MOUSE_BUTTON_LEFT)&&(action==GLFW_PRESS  )) dash.SendMouseClick(1);
+    else if ((button==GLFW_MOUSE_BUTTON_LEFT)&&(action==GLFW_RELEASE)) dash.SendMouseClick(0);
 }
 
 void mouseMove(GLFWwindow* pWindow, double xd, double yd)
@@ -435,6 +449,9 @@ void mouseMove(GLFWwindow* pWindow, double xd, double yd)
         // Passive motion, no mouse button pressed
         g_app.OnMouseMove(static_cast<int>(x), static_cast<int>(y));
     }
+
+    DashboardScene& dash = g_app.m_dashScene;
+    dash.SendMouseMotion(x, y);
 }
 
 void mouseWheel(GLFWwindow* pWindow, double x, double y)
