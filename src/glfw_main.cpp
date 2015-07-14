@@ -394,7 +394,7 @@ void mouseDown(GLFWwindow* pWindow, int button, int action, int mods)
     {
         which_button = -1;
     }
-    g_app.OnMouseButton(button, action);
+    //g_app.OnMouseButton(button, action);
 
     if (action == GLFW_PRESS)
     {
@@ -405,6 +405,15 @@ void mouseDown(GLFWwindow* pWindow, int button, int action, int mods)
     if ((action==GLFW_PRESS)&&(button==GLFW_MOUSE_BUTTON_MIDDLE))
     {
         dash.m_bDraw = !dash.m_bDraw;
+    }
+    if (dash.m_bDraw)
+    {
+        if (button == GLFW_MOUSE_BUTTON_RIGHT)
+        {
+            const int flag = (action == GLFW_PRESS) ? 1 : 0;
+            dash.SetHoldingFlag(flag);
+            LOG_INFO("hold flag: %d", flag);
+        }
     }
 
     if      ((button==GLFW_MOUSE_BUTTON_LEFT)&&(action==GLFW_PRESS  )) dash.SendMouseClick(1);
@@ -427,6 +436,7 @@ void mouseMove(GLFWwindow* pWindow, double xd, double yd)
     g_app.m_mouseDeltaYaw = 0.0f;
     g_app.m_mouseMove = glm::vec3(0.0f);
 
+    DashboardScene& dash = g_app.m_dashScene;
     if (which_button == GLFW_MOUSE_BUTTON_1)
     {
         const float spinMagnitude = 0.05f;
@@ -434,15 +444,21 @@ void mouseMove(GLFWwindow* pWindow, double xd, double yd)
     }
     else if (which_button == GLFW_MOUSE_BUTTON_2) // Right click
     {
-        const float moveMagnitude = 0.5f;
-        g_app.m_mouseMove.x += static_cast<float>(mmx) * moveMagnitude;
-        g_app.m_mouseMove.z += static_cast<float>(mmy) * moveMagnitude;
+        if (!dash.m_bDraw)
+        {
+            const float moveMagnitude = 0.5f;
+            g_app.m_mouseMove.x += static_cast<float>(mmx)* moveMagnitude;
+            g_app.m_mouseMove.z += static_cast<float>(mmy)* moveMagnitude;
+        }
     }
     else if (which_button == GLFW_MOUSE_BUTTON_3) // Middle click
     {
-        const float moveMagnitude = 0.5f;
-        g_app.m_mouseMove.x += static_cast<float>(mmx) * moveMagnitude;
-        g_app.m_mouseMove.y -= static_cast<float>(mmy) * moveMagnitude;
+        if (!dash.m_bDraw)
+        {
+            const float moveMagnitude = 0.5f;
+            g_app.m_mouseMove.x += static_cast<float>(mmx)* moveMagnitude;
+            g_app.m_mouseMove.y -= static_cast<float>(mmy)* moveMagnitude;
+        }
     }
     else
     {
@@ -450,8 +466,10 @@ void mouseMove(GLFWwindow* pWindow, double xd, double yd)
         g_app.OnMouseMove(static_cast<int>(x), static_cast<int>(y));
     }
 
-    DashboardScene& dash = g_app.m_dashScene;
-    dash.SendMouseMotion(x, y);
+    if (dash.m_bDraw)
+    {
+        dash.SendMouseMotion(x, y);
+    }
 }
 
 void mouseWheel(GLFWwindow* pWindow, double x, double y)
