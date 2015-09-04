@@ -14,7 +14,11 @@ SET( GL_FRAMEWORK "GLFW" CACHE STRING "Which OpenGL windowing framework to use" 
 # on the build machine and link the libraries in.
 SET( USE_ANTTWEAKBAR TRUE CACHE BOOL "Use AntTweakBar" )
 SET( USE_SIXENSE TRUE CACHE BOOL "Use Sixense" )
+
 SET( USE_OCULUSSDK TRUE CACHE BOOL "Use Oculus SDK" )
+SET( USE_OSVR FALSE CACHE BOOL "Use OSVR SDK" )
+
+SET( OVRSDK_VERSION "05" CACHE STRING "Which version of the OVR SDK to use - 05 or 06" )
 
 SET( USE_CORE_CONTEXT TRUE CACHE BOOL "Use Core Context" )
 IF( USE_CORE_CONTEXT )
@@ -76,7 +80,17 @@ IF( WIN32 )
     ADD_DEFINITIONS( -DGLEW_STATIC )
 
     IF( USE_OCULUSSDK )
-        SET( OCULUSSDK_ROOT "${LIBS_HOME}/OculusSDK" CACHE STRING "OculusSDK root" )
+        # TODO: the logic here needs work, OVR SDK dir is kept in cache until manually changed
+        IF( OVRSDK_VERSION STREQUAL "05" )
+            SET( OCULUSSDK_ROOT "${LIBS_HOME}/OculusSDK-0.5.0.1" CACHE STRING "OculusSDK root" )
+            ADD_DEFINITIONS( -DOVRSDK05 )
+        ELSEIF( OVRSDK_VERSION STREQUAL "06" )
+            SET( OCULUSSDK_ROOT "${LIBS_HOME}/OculusSDK" CACHE STRING "OculusSDK root" )
+            ADD_DEFINITIONS( -DOVRSDK06 )
+        ELSE()
+            MESSAGE("Unknown OVR SDK version.")
+        ENDIF()
+
         INCLUDE_DIRECTORIES( "${OCULUSSDK_ROOT}/LibOVR/Include" )
         INCLUDE_DIRECTORIES( "${OCULUSSDK_ROOT}/LibOVR/Src" )
         INCLUDE_DIRECTORIES( "${OCULUSSDK_ROOT}/LibOVRKernel/Src" )
@@ -102,6 +116,15 @@ IF( WIN32 )
         SET( OVR_LIBS LibOVR.lib )
         ADD_DEFINITIONS( -DUSE_OCULUSSDK )
     ENDIF( USE_OCULUSSDK )
+
+    IF( USE_OSVR )
+        SET( OSVR_ROOT "${LIBS_HOME}/OSVR-Core-Snapshot-v0.2-338-ga848a4c-build122-vs12-32bit" CACHE STRING "OSVR root" )
+        INCLUDE_DIRECTORIES( "${OSVR_ROOT}/include" )
+        LINK_DIRECTORIES   ( "${OSVR_ROOT}/lib" )
+        SET( OSVR_LIBS osvrClientKit.lib )
+        INCLUDE_DIRECTORIES( "${LIBS_HOME}/boost_1_58_0" )
+        ADD_DEFINITIONS( -DUSE_OSVR )
+    ENDIF( USE_OSVR )
 
     IF( USE_SIXENSE )
         MESSAGE("Using Sixense SDK.")
@@ -131,6 +154,7 @@ IF( WIN32 )
         ${FRAMEWORK_LIBS}
         opengl32.lib glu32.lib glew32s.lib
         ${OVR_LIBS}
+        ${OSVR_LIBS}
         Winmm.lib
         ws2_32.lib
         ${HYDRA_LIBS}
@@ -256,6 +280,7 @@ ELSEIF( UNIX )
         INCLUDE_DIRECTORIES( "${OCULUSSDK_ROOT}/LibOVRKernel/Src" )
         LINK_DIRECTORIES   ( "${OCULUSSDK_ROOT}/LibOVR/Lib/Linux/x86_64/Release/" )
         SET( OVR_LIBS -lOVR -ldl -ludev -lXinerama )
+        ADD_DEFINITIONS( -DOVRSDK05 ) # The only option for now
         ADD_DEFINITIONS( -DUSE_OCULUSSDK )
     ENDIF( USE_OCULUSSDK )
 
@@ -334,10 +359,29 @@ IF( NOT USE_OCULUSSDK )
     MESSAGE( "Removing OVR-dependent files..." )
 
     LIST(REMOVE_ITEM APPSKELETON_SOURCE_FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/AppSkeleton/RiftAppSkeleton.cpp )
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/AppSkeleton/OVRSDK05AppSkeleton.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/AppSkeleton/OVRSDK06AppSkeleton.cpp
+        )
 
     LIST(REMOVE_ITEM SCENE_SOURCE_FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Scene/OVRScene.cpp )
+ENDIF()
+
+IF( NOT USE_OSVR )
+    MESSAGE( "Removing OSVR-dependent files..." )
+    LIST(REMOVE_ITEM APPSKELETON_SOURCE_FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/AppSkeleton/OsvrAppSkeleton.cpp )
+ENDIF()
+
+# Manually exclude non-selected OVR SDK Skeleton classes
+IF( OVRSDK_VERSION STREQUAL "05" )
+    MESSAGE( "Removing OVR SDK06-dependent files..." )
+    LIST(REMOVE_ITEM APPSKELETON_SOURCE_FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/AppSkeleton/OVRSDK06AppSkeleton.cpp )
+ELSEIF( OVRSDK_VERSION STREQUAL "06" )
+    MESSAGE( "Removing OVR SDK05-dependent files..." )
+    LIST(REMOVE_ITEM APPSKELETON_SOURCE_FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/AppSkeleton/OVRSDK05AppSkeleton.cpp )
 ENDIF()
 
 INCLUDE_DIRECTORIES("src/Util")
@@ -351,8 +395,18 @@ ADD_LIBRARY( AppSkeleton ${APPSKELETON_SOURCE_FILES} )
 ADD_LIBRARY( Scene       ${SCENE_SOURCE_FILES} )
 ADD_LIBRARY( FlyingMouse ${FLYINGMOUSE_SOURCE_FILES} )
 
+#
+# Some convoluted logic here to choose one of several main source files:
+# Since the OVR 06 SDK changes the way main handles the AppSkeleton, there is a main
+# file for each windowing system(GLFW,SDL) and SDK version(05,06).
+#
 IF( GL_FRAMEWORK STREQUAL "GLFW" )
-    ADD_EXECUTABLE( ${PROJECT_NAME} src/glfw_main.cpp )
+    IF( OVRSDK_VERSION STREQUAL "05" )
+        ADD_EXECUTABLE( ${PROJECT_NAME} src/glfw_main.cpp )
+    ELSEIF( OVRSDK_VERSION STREQUAL "06" )
+        ADD_EXECUTABLE( ${PROJECT_NAME} src/glfw_sdk06_main.cpp )
+    ENDIF()
+# TODO: OVR SDK 06 and SDL
 ELSEIF( GL_FRAMEWORK STREQUAL "SDL" )
     ADD_EXECUTABLE( ${PROJECT_NAME} src/sdl_main.cpp )
 ELSEIF( GL_FRAMEWORK STREQUAL "SFML" )

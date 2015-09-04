@@ -1,4 +1,4 @@
-// glfw_main.cpp
+// glfw_sdk06_main.cpp
 // With humongous thanks to cThrough 2014 (Daniel Dekkers)
 
 #include <GL/glew.h>
@@ -7,11 +7,6 @@
 #  include <Windows.h>
 #  define GLFW_EXPOSE_NATIVE_WIN32
 #  define GLFW_EXPOSE_NATIVE_WGL
-#elif defined(__linux__)
-#  include <X11/X.h>
-#  include <X11/extensions/Xrandr.h>
-#  define GLFW_EXPOSE_NATIVE_X11
-#  define GLFW_EXPOSE_NATIVE_GLX
 #endif
 
 #include <GLFW/glfw3.h>
@@ -34,12 +29,7 @@
 #if defined(USE_OSVR)
 #include "OsvrAppSkeleton.h"
 #elif defined(USE_OCULUSSDK)
-#  if defined(OVRSDK05)
-#  include "OVRSDK05AppSkeleton.h"
-#  elif defined(OVRSDK06)
 #  include "OVRSDK06AppSkeleton.h"
-#  else
-#  endif
 #else
 #include "AppSkeleton.h"
 #endif
@@ -52,12 +42,7 @@
 #if defined(USE_OSVR)
 OsvrAppSkeleton g_app;
 #elif defined(USE_OCULUSSDK)
-#  if defined(OVRSDK05)
-OVRSDK05AppSkeleton g_app;
-#  elif defined(OVRSDK06)
 OVRSDK06AppSkeleton g_app;
-#  else
-#  endif
 #else
 AppSkeleton g_app;
 #endif
@@ -80,9 +65,7 @@ int oldx, oldy, newx, newy;
 int which_button = -1;
 int modifier_mode = 0;
 
-ShaderWithVariables g_auxPresent;
 GLFWwindow* g_pHMDWindow = NULL;
-GLFWwindow* g_AuxWindow = NULL;
 int g_auxWindow_w = 1920 / 2;
 int g_auxWindow_h = 587;
 
@@ -109,13 +92,6 @@ void destroyAuxiliaryWindow(GLFWwindow* pAuxWindow);
 static void SetVsync(int state)
 {
     LOG_INFO("SetVsync(%d)", state);
-
-    // Since AuxWindow holds the tweakbar, this should never be NULL
-    if (g_AuxWindow != NULL)
-    {
-        glfwMakeContextCurrent(g_AuxWindow);
-        glfwSwapInterval(state);
-    }
     glfwMakeContextCurrent(g_pHMDWindow);
     glfwSwapInterval(state);
 }
@@ -231,7 +207,6 @@ void keyboard(GLFWwindow* pWindow, int key, int codes, int action, int mods)
 #endif
 
         case GLFW_KEY_ESCAPE:
-            if (g_AuxWindow == NULL)
             {
                 // Clear the frame before calling all the destructors - even a few
                 // frames worth of frozen video is enough to cause discomfort!
@@ -246,11 +221,6 @@ void keyboard(GLFWwindow* pWindow, int key, int codes, int action, int mods)
                 glfwDestroyWindow(g_pHMDWindow);
                 glfwTerminate();
                 exit(0);
-            }
-            else
-            {
-                destroyAuxiliaryWindow(g_AuxWindow);
-                glfwMakeContextCurrent(g_pHMDWindow);
             }
             break;
         }
@@ -417,7 +387,7 @@ void mouseDown(GLFWwindow* pWindow, int button, int action, int mods)
     }
 
     DashboardScene& dash = g_app.m_dashScene;
-    if ((action==GLFW_PRESS)&&(button==GLFW_MOUSE_BUTTON_MIDDLE))
+    if ((action == GLFW_PRESS) && (button == GLFW_MOUSE_BUTTON_MIDDLE))
     {
         dash.m_bDraw = !dash.m_bDraw;
     }
@@ -431,8 +401,8 @@ void mouseDown(GLFWwindow* pWindow, int button, int action, int mods)
         }
     }
 
-    if      ((button==GLFW_MOUSE_BUTTON_LEFT)&&(action==GLFW_PRESS  )) dash.SendMouseClick(1);
-    else if ((button==GLFW_MOUSE_BUTTON_LEFT)&&(action==GLFW_RELEASE)) dash.SendMouseClick(0);
+    if ((button == GLFW_MOUSE_BUTTON_LEFT) && (action == GLFW_PRESS)) dash.SendMouseClick(1);
+    else if ((button == GLFW_MOUSE_BUTTON_LEFT) && (action == GLFW_RELEASE)) dash.SendMouseClick(0);
 }
 
 void mouseMove(GLFWwindow* pWindow, double xd, double yd)
@@ -536,9 +506,13 @@ void mouseMove_Aux(GLFWwindow* pWindow, double xd, double yd)
     (void)pWindow;
 
 #ifdef USE_ANTTWEAKBAR
-    int ant = TwEventMousePosGLFW(static_cast<int>(xd), static_cast<int>(yd));
-    if (ant != 0)
-        return;
+    DashboardScene& dash = g_app.m_dashScene;
+    if (!dash.m_bDraw)
+    {
+        const int ant = TwEventMousePosGLFW(static_cast<int>(xd), static_cast<int>(yd));
+        if (ant != 0)
+            return;
+    }
 #endif
     mouseMove(pWindow, xd, yd);
 }
@@ -566,10 +540,8 @@ void resize_Aux(GLFWwindow* pWindow, int w, int h)
     TwWindowSize(w, h);
 #endif
 
-#if defined(OVRSDK06)
     ovrSizei sz = { w, h };
     g_app.SetAppWindowSize(sz);
-#endif
 }
 
 void timestep()
@@ -603,82 +575,6 @@ void printGLContextInfo(GLFWwindow* pW)
     LOG_INFO("Renderer: %s", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
 }
 
-void initAuxPresentFboShader()
-{
-    g_auxPresent.initProgram("presentfbo");
-    g_auxPresent.bindVAO();
-
-    const float verts[] = {
-        -1, -1,
-        1, -1,
-        1, 1,
-        -1, 1
-    };
-    // The aspect ratio of one eye's view is half side-by-side(portrait), so we can chop
-    // the top and bottom parts off to present something closer to landscape.
-    const float texs[] = {
-        0.0f, 0.25f,
-        0.5f, 0.25f,
-        0.5f, 0.75f,
-        0.0f, 0.75f,
-    };
-
-    GLuint vertVbo = 0;
-    glGenBuffers(1, &vertVbo);
-    g_auxPresent.AddVbo("vPosition", vertVbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vertVbo);
-    glBufferData(GL_ARRAY_BUFFER, 4*2*sizeof(GLfloat), verts, GL_STATIC_DRAW);
-    glVertexAttribPointer(g_auxPresent.GetAttrLoc("vPosition"), 2, GL_FLOAT, GL_FALSE, 0, NULL);
-
-    GLuint texVbo = 0;
-    glGenBuffers(1, &texVbo);
-    g_auxPresent.AddVbo("vTex", texVbo);
-    glBindBuffer(GL_ARRAY_BUFFER, texVbo);
-    glBufferData(GL_ARRAY_BUFFER, 4*2*sizeof(GLfloat), texs, GL_STATIC_DRAW);
-    glVertexAttribPointer(g_auxPresent.GetAttrLoc("vTex"), 2, GL_FLOAT, GL_FALSE, 0, NULL);
-
-    glEnableVertexAttribArray(g_auxPresent.GetAttrLoc("vPosition"));
-    glEnableVertexAttribArray(g_auxPresent.GetAttrLoc("vTex"));
-
-    glUseProgram(g_auxPresent.prog());
-    {
-        const glm::mat4 id(1.0f);
-        glUniformMatrix4fv(g_auxPresent.GetUniLoc("mvmtx"), 1, false, glm::value_ptr(id));
-        glUniformMatrix4fv(g_auxPresent.GetUniLoc("prmtx"), 1, false, glm::value_ptr(id));
-    }
-    glUseProgram(0);
-
-    glBindVertexArray(0);
-}
-
-void presentSharedFboTexture()
-{
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-
-    glViewport(0, 0, g_auxWindow_w, g_auxWindow_h);
-
-    // Present FBO to screen
-    const GLuint prog = g_auxPresent.prog();
-    glUseProgram(prog);
-    g_auxPresent.bindVAO();
-    {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, g_app.getRenderBufferTex());
-        glUniform1i(g_auxPresent.GetUniLoc("fboTex"), 0);
-
-        // This is the only uniform that changes per-frame
-        const float fboScale = g_renderMode.outputType == RenderingMode::OVR_SDK ?
-            1.0f :
-            g_app.GetFboScale();
-        glUniform1f(g_auxPresent.GetUniLoc("fboScale"), fboScale);
-
-        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-    }
-    glBindVertexArray(0);
-    glUseProgram(0);
-}
-
 void displayToHMD()
 {
     switch(g_renderMode.outputType)
@@ -707,23 +603,12 @@ void displayToHMD()
 
 #elif defined(USE_OCULUSSDK)
     case RenderingMode::SideBySide_Undistorted:
-        g_app.display_stereo_undistorted();
-        glfwSwapBuffers(g_pHMDWindow);
-        break;
-
     case RenderingMode::OVR_SDK:
-        g_app.display_sdk();
-#ifdef OVRSDK06
-#  ifdef USE_ANTTWEAKBAR
-        TwDraw(); ///@todo Should this go first? Will it write to a depth buffer?
-#  endif
-        glfwSwapBuffers(g_pHMDWindow);
-#endif
-        // OVR SDK 05 will do its own swap
-        break;
-
     case RenderingMode::OVR_Client:
-        g_app.display_client();
+        g_app.display_sdk();
+#ifdef USE_ANTTWEAKBAR
+        TwDraw(); ///@todo Should this go first? Will it write to a depth buffer?
+#endif
         glfwSwapBuffers(g_pHMDWindow);
         break;
 #endif //USE_OCULUSSDK
@@ -732,52 +617,6 @@ void displayToHMD()
         LOG_ERROR("Unknown display type: %d", g_renderMode.outputType);
         break;
     }
-}
-
-///@return An auxiliary "control view" window to display a monoscopic view of the world
-/// that the Rift user is inhabiting(on the primary VR window). Yes, this takes resources
-/// away from the VR user's rendering and will lower the rendering throughput(MPx/sec)
-/// available to the HMD. It should not negatively impact latency until frame rate drops
-/// below the display's refresh rate(which will happen sooner with this extra load, but
-/// can be tuned). Pixel fill can be tuned by adjusting the FBO render target size with
-/// the mouse wheel, but vertex rate cannot and another render pass adds 50%.
-///@todo A more palatable solution is to share the FBO render target between this and
-/// the Rift window and just present the left half of it.
-GLFWwindow* initializeAuxiliaryWindow(GLFWwindow* pRiftWindow)
-{
-    ///@todo Set size to half FBO target width
-    GLFWwindow* pAuxWindow = glfwCreateWindow(g_auxWindow_w, g_auxWindow_h, "Control Window", NULL, pRiftWindow);
-    if (pAuxWindow == NULL)
-    {
-        return NULL;
-    }
-
-    glfwMakeContextCurrent(pAuxWindow);
-    {
-        // Create context-specific data here
-        initAuxPresentFboShader();
-    }
-
-    glfwSetMouseButtonCallback(pAuxWindow, mouseDown_Aux);
-    glfwSetCursorPosCallback(pAuxWindow, mouseMove_Aux);
-    glfwSetScrollCallback(pAuxWindow, mouseWheel_Aux);
-    glfwSetKeyCallback(pAuxWindow, keyboard_Aux);
-    glfwSetWindowSizeCallback(pAuxWindow, resize_Aux);
-
-    // The window will be shown whether we do this or not (on Windows)...
-    glfwShowWindow(pAuxWindow);
-
-    glfwMakeContextCurrent(pRiftWindow);
-
-    return pAuxWindow;
-}
-
-void destroyAuxiliaryWindow(GLFWwindow* pAuxWindow)
-{
-    glfwMakeContextCurrent(pAuxWindow);
-    g_auxPresent.destroy();
-    glfwDestroyWindow(pAuxWindow);
-    g_AuxWindow = NULL;
 }
 
 // OpenGL debug callback
@@ -930,56 +769,6 @@ int main(int argc, char** argv)
         glfwSetWindowPos(l_Window, pos.x, pos.y);
     }
 
-#elif defined(OVRSDK05)
-    ovrSizei sz = g_app.getHmdResolution();
-    const ovrVector2i pos = g_app.getHmdWindowPos();
-    std::string windowTitle = "";
-
-    if (g_app.UsingDebugHmd() == true)
-    {
-        // Create a normal, decorated application window
-        LOG_INFO("Using Debug HMD mode.");
-        windowTitle = PROJECT_NAME "-GLFW-DebugHMD";
-        g_renderMode.outputType = RenderingMode::Mono_Buffered;
-
-        l_Window = glfwCreateWindow(sz.w, sz.h, windowTitle.c_str(), NULL, NULL);
-    }
-    else if (g_app.UsingDirectMode())
-    {
-        // HMD active - position undecorated window to fill HMD viewport
-        LOG_INFO("Using Direct to Rift mode.");
-        windowTitle = PROJECT_NAME "-GLFW-Direct";
-
-        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-        sz.w = mode->width;
-        sz.h = mode->height;
-        LOG_INFO("Creating window %dx%d@%d,%d", sz.w, sz.h, pos.x, pos.y);
-        l_Window = glfwCreateWindow(sz.w, sz.h, windowTitle.c_str(), monitor, NULL);
-        glfwSetInputMode(l_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-#ifdef _LINUX
-        swapBackBufferDims = true;
-#endif
-
-#if defined(_WIN32)
-        g_app.AttachToWindow((void*)glfwGetWin32Window(l_Window));
-#endif
-    }
-    else
-    {
-        LOG_INFO("Using Extended desktop mode.");
-        windowTitle = PROJECT_NAME "-GLFW-Extended";
-
-        LOG_INFO("Creating GLFW_DECORATED window %dx%d@%d,%d", sz.w, sz.h, pos.x, pos.y);
-        glfwWindowHint(GLFW_DECORATED, 0);
-        l_Window = glfwCreateWindow(sz.w, sz.h, windowTitle.c_str(), NULL, NULL);
-        glfwWindowHint(GLFW_DECORATED, 1);
-        glfwSetInputMode(l_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        glfwSetWindowPos(l_Window, pos.x, pos.y);
-    }
-
-    resize(l_Window, sz.w, sz.h); // inform AppSkeleton of window size
 #elif defined(OVRSDK06)
     std::string windowTitle = "";
 
@@ -1002,7 +791,7 @@ int main(int argc, char** argv)
 #else
     l_Window = glfwCreateWindow(800, 600, "GLFW Oculus Rift Test", NULL, NULL);
     std::string windowTitle = PROJECT_NAME;
-#endif //USE_OSVR|OVRSDK05|OVRSDK06
+#endif //USE_OSVR|OVRSDK06
 
     if (!l_Window)
     {
@@ -1011,29 +800,12 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-    // Required for SDK rendering (to do the buffer swap on its own)
-#ifdef OVRSDK05
-  #if defined(_WIN32)
-    g_app.setWindow(glfwGetWin32Window(l_Window));
-  #elif defined(__linux__)
-    g_app.setWindow(NULL);//glfwGetX11Display());
-  #endif
-#endif //USE_OCULUSSDK
-
     glfwMakeContextCurrent(l_Window);
-#ifdef OVRSDK06
     glfwSetWindowSizeCallback(l_Window, resize_Aux);
     glfwSetMouseButtonCallback(l_Window, mouseDown_Aux);
     glfwSetCursorPosCallback(l_Window, mouseMove_Aux);
     glfwSetScrollCallback(l_Window, mouseWheel_Aux);
     glfwSetKeyCallback(l_Window, keyboard_Aux);
-#else
-    glfwSetWindowSizeCallback(l_Window, resize);
-    glfwSetMouseButtonCallback(l_Window, mouseDown);
-    glfwSetCursorPosCallback(l_Window, mouseMove);
-    glfwSetScrollCallback(l_Window, mouseWheel);
-    glfwSetKeyCallback(l_Window, keyboard);
-#endif
 
     memset(m_keyStates, 0, GLFW_KEY_LAST*sizeof(int));
 
@@ -1094,9 +866,7 @@ int main(int argc, char** argv)
     g_app.initVR(swapBackBufferDims);
     LOG_INFO("initVR(%d) complete.", swapBackBufferDims);
 
-#if defined(OVRSDK06)
-    SetVsync(0);
-#endif
+    SetVsync(0); // SDK 0.6 requires vsync OFF
 
     while (!glfwWindowShouldClose(l_Window))
     {
@@ -1128,8 +898,6 @@ int main(int argc, char** argv)
                 << static_cast<int>(g_fps.GetFPS())
                 << " fps";
             glfwSetWindowTitle(l_Window, oss.str().c_str());
-            if (g_AuxWindow != NULL)
-                glfwSetWindowTitle(g_AuxWindow, oss.str().c_str());
         }
 #endif
         const float dumpInterval = 1.f;
@@ -1137,40 +905,6 @@ int main(int argc, char** argv)
         {
             LOG_INFO("Frame rate: %d fps", static_cast<int>(g_fps.GetFPS()));
             g_logDumpTimer.reset();
-        }
-
-        // Optionally display to auxiliary mono view
-        if (g_AuxWindow != NULL)
-        {
-            glfwMakeContextCurrent(g_AuxWindow);
-            glClearColor(0.f, 0.f, 0.f, 0.f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            ///@note VAOs *cannot* be shared between contexts.
-            ///@note GLFW windows are inextricably tied to their own unique context.
-            /// For these two reasons, calling draw a third time for the auxiliary window
-            /// is not possible. Furthermore, it is not strictly desirable for the extra
-            /// rendering cost.
-            /// Instead, we share the render target texture from the stereo render and present
-            /// just the left eye to the aux window.
-            if (g_drawToAuxWindow)
-            {
-                presentSharedFboTexture();
-            }
-
-#ifdef USE_ANTTWEAKBAR
-            TwDraw(); ///@todo Should this go first? Will it write to a depth buffer?
-#endif
-
-            glfwSwapBuffers(g_AuxWindow);
-
-            if (glfwWindowShouldClose(g_AuxWindow))
-            {
-                destroyAuxiliaryWindow(g_AuxWindow);
-            }
-
-            // Set context to Rift window when done
-            glfwMakeContextCurrent(l_Window);
         }
     }
 

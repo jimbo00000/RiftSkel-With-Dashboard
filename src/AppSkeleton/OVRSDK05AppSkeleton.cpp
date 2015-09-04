@@ -1,4 +1,4 @@
-// RiftAppSkeleton.cpp
+// OVRSDK05AppSkeleton.cpp
 
 #ifdef _WIN32
 #  define WINDOWS_LEAN_AND_MEAN
@@ -11,10 +11,11 @@
 #include <math.h>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
 
 #include <OVR.h>
 
-#include "RiftAppSkeleton.h"
+#include "OVRSDK05AppSkeleton.h"
 #include "ShaderFunctions.h"
 #include "MatrixFunctions.h"
 #include "GLUtils.h"
@@ -26,7 +27,7 @@
 #define PROJECT_NAME "RiftSkeleton"
 #endif
 
-RiftAppSkeleton::RiftAppSkeleton()
+OVRSDK05AppSkeleton::OVRSDK05AppSkeleton()
 : m_Hmd(NULL)
 , m_hmdCaps(0)
 , m_distortionCaps(0)
@@ -40,23 +41,20 @@ RiftAppSkeleton::RiftAppSkeleton()
     // Unfortunately, the OVR perf log does not appear to re-read data
     // at the given user pointer each log entry(~1Hz). Is this a bug?
 #endif
-
-    m_dashScene.SetHmdPositionPointer(&m_hmdRoLocal);
-    m_dashScene.SetHmdDirectionPointer(&m_hmdRdLocal);
 }
 
-RiftAppSkeleton::~RiftAppSkeleton()
+OVRSDK05AppSkeleton::~OVRSDK05AppSkeleton()
 {
 }
 
-void RiftAppSkeleton::RecenterPose()
+void OVRSDK05AppSkeleton::RecenterPose()
 {
     if (m_Hmd == NULL)
         return;
     ovrHmd_RecenterPose(m_Hmd);
 }
 
-ovrSizei RiftAppSkeleton::getHmdResolution() const
+ovrSizei OVRSDK05AppSkeleton::getHmdResolution() const
 {
     if (m_Hmd == NULL)
     {
@@ -66,7 +64,7 @@ ovrSizei RiftAppSkeleton::getHmdResolution() const
     return m_Hmd->Resolution;
 }
 
-ovrVector2i RiftAppSkeleton::getHmdWindowPos() const
+ovrVector2i OVRSDK05AppSkeleton::getHmdWindowPos() const
 {
     if (m_Hmd == NULL)
     {
@@ -76,7 +74,7 @@ ovrVector2i RiftAppSkeleton::getHmdWindowPos() const
     return m_Hmd->WindowsPos;
 }
 
-glm::ivec2 RiftAppSkeleton::getRTSize() const
+glm::ivec2 OVRSDK05AppSkeleton::getRTSize() const
 {
     const ovrSizei& sz = m_Cfg.OGL.Header.BackBufferSize;
     return glm::ivec2(sz.w, sz.h);
@@ -84,13 +82,13 @@ glm::ivec2 RiftAppSkeleton::getRTSize() const
 
 /// Uses a cached copy of HMD orientation written to in display(which are const
 /// functions, but m_eyePoseCached is a mutable member).
-glm::mat4 RiftAppSkeleton::makeWorldToEyeMatrix() const
+glm::mat4 OVRSDK05AppSkeleton::makeWorldToEyeMatrix() const
 {
     return makeWorldToChassisMatrix() * makeMatrixFromPose(m_eyePoseCached);
 }
 
 ///@brief Set this up early so we can get the HMD's display dimensions to create a window.
-void RiftAppSkeleton::initHMD()
+void OVRSDK05AppSkeleton::initHMD()
 {
     ovr_Initialize();
 
@@ -130,7 +128,7 @@ void RiftAppSkeleton::initHMD()
     }
 }
 
-void RiftAppSkeleton::initVR(bool swapBackBufferDims)
+void OVRSDK05AppSkeleton::initVR(bool swapBackBufferDims)
 {
     m_Cfg.OGL.Header.BackBufferSize = getHmdResolution();
 
@@ -152,7 +150,7 @@ void RiftAppSkeleton::initVR(bool swapBackBufferDims)
     _initPresentDistMesh(m_presentDistMeshR, 1);
 }
 
-void RiftAppSkeleton::_initPresentDistMesh(ShaderWithVariables& shader, int eyeIdx)
+void OVRSDK05AppSkeleton::_initPresentDistMesh(ShaderWithVariables& shader, int eyeIdx)
 {
     // Init left and right VAOs separately
     shader.bindVAO();
@@ -207,7 +205,7 @@ void RiftAppSkeleton::_initPresentDistMesh(ShaderWithVariables& shader, int eyeI
     glBindVertexArray(0);
 }
 
-void RiftAppSkeleton::exitVR()
+void OVRSDK05AppSkeleton::exitVR()
 {
 #ifdef USE_OVR_PERF_LOGGING
     ovrHmd_StopPerfLog(m_Hmd);
@@ -233,7 +231,7 @@ ovrSizei calculateCombinedTextureSize(ovrHmd pHmd)
 }
 
 ///@brief Writes to m_EyeTexture and m_EyeFov
-int RiftAppSkeleton::ConfigureRendering()
+int OVRSDK05AppSkeleton::ConfigureRendering()
 {
     if (m_Hmd == NULL)
         return 1;
@@ -270,7 +268,7 @@ int RiftAppSkeleton::ConfigureRendering()
 
 ///@brief Active GL context is required for the following
 /// Writes to m_Cfg
-int RiftAppSkeleton::ConfigureSDKRendering()
+int OVRSDK05AppSkeleton::ConfigureSDKRendering()
 {
     if (m_Hmd == NULL)
         return 1;
@@ -289,8 +287,27 @@ int RiftAppSkeleton::ConfigureSDKRendering()
     return 0;
 }
 
+///@brief This is for re-using the distortion mesh in the OVRAppSkeleton.
+/// I hope we are not violating OVR SDK's license too badly here.
+void saveDistortionMeshToFile(const ovrDistortionMesh& mesh, const std::string filename)
+{
+    if (filename.empty())
+        return;
+    std::ofstream file;
+    file.open(filename.c_str(), std::ios::out | std::ios::binary);
+    if (!file.is_open())
+    {
+        std::cerr << "saveDistortionMeshToFile: could not open file " << filename << std::endl;
+    }
+    file.write(reinterpret_cast <const char*>(&mesh.VertexCount), sizeof(mesh.VertexCount));
+    file.write(reinterpret_cast <const char*>(&mesh.IndexCount), sizeof(mesh.IndexCount));
+    file.write(reinterpret_cast <const char*>(mesh.pVertexData), mesh.VertexCount*sizeof(ovrDistortionVertex));
+    file.write(reinterpret_cast <const char*>(mesh.pIndexData), mesh.IndexCount*sizeof(unsigned short));
+    file.close();
+}
+
 ///@brief Writes to m_EyeRenderDesc, m_EyeRenderDesc and m_DistMeshes
-int RiftAppSkeleton::ConfigureClientRendering()
+int OVRSDK05AppSkeleton::ConfigureClientRendering()
 {
     if (m_Hmd == NULL)
         return 1;
@@ -308,51 +325,53 @@ int RiftAppSkeleton::ConfigureClientRendering()
             m_EyeRenderDesc[eye].Fov,
             m_distortionCaps,
             &m_DistMeshes[eye]);
+
+        saveDistortionMeshToFile(m_DistMeshes[eye], eye == ovrEye_Left ? "meshL.dat" : "meshR.dat");
     }
     return 0;
 }
 
 // http://nuclear.mutantstargoat.com/hg/oculus2/file/a7a3f89def42/src/main.c
 // Thank you John Tsiombikas.
-void RiftAppSkeleton::ToggleVignette()
+void OVRSDK05AppSkeleton::ToggleVignette()
 {
     m_distortionCaps ^= ovrDistortionCap_Vignette;
     ovrHmd_ConfigureRendering(m_Hmd, &m_Cfg.Config, m_distortionCaps, m_EyeFov, m_EyeRenderDesc);
 }
 
-void RiftAppSkeleton::ToggleTimeWarp()
+void OVRSDK05AppSkeleton::ToggleTimeWarp()
 {
     m_distortionCaps ^= ovrDistortionCap_TimeWarp;
     ovrHmd_ConfigureRendering(m_Hmd, &m_Cfg.Config, m_distortionCaps, m_EyeFov, m_EyeRenderDesc);
 }
 
-void RiftAppSkeleton::ToggleOverdrive()
+void OVRSDK05AppSkeleton::ToggleOverdrive()
 {
     m_distortionCaps ^= ovrDistortionCap_Overdrive;
     ovrHmd_ConfigureRendering(m_Hmd, &m_Cfg.Config, m_distortionCaps, m_EyeFov, m_EyeRenderDesc);
 }
 
-void RiftAppSkeleton::ToggleLowPersistence()
+void OVRSDK05AppSkeleton::ToggleLowPersistence()
 {
     m_hmdCaps ^= ovrHmdCap_LowPersistence;
     ovrHmd_SetEnabledCaps(m_Hmd, m_hmdCaps);
 }
 
-void RiftAppSkeleton::ToggleMirrorToWindow()
+void OVRSDK05AppSkeleton::ToggleMirrorToWindow()
 {
     // Turning this off mid-run shows banded swap artifacts on the main monitor.
     m_hmdCaps ^= ovrHmdCap_NoMirrorToWindow;
     ovrHmd_SetEnabledCaps(m_Hmd, m_hmdCaps);
 }
 
-void RiftAppSkeleton::ToggleDynamicPrediction()
+void OVRSDK05AppSkeleton::ToggleDynamicPrediction()
 {
     m_hmdCaps ^= ovrHmdCap_DynamicPrediction;
     ovrHmd_SetEnabledCaps(m_Hmd, m_hmdCaps);
 }
 
 ///@brief The HSW will be displayed by default when using SDK rendering.
-void RiftAppSkeleton::DismissHealthAndSafetyWarning() const
+void OVRSDK05AppSkeleton::DismissHealthAndSafetyWarning() const
 {
     ovrHSWDisplayState hswDisplayState;
     ovrHmd_GetHSWDisplayState(m_Hmd, &hswDisplayState);
@@ -365,7 +384,7 @@ void RiftAppSkeleton::DismissHealthAndSafetyWarning() const
 ///@brief The HSW will be displayed by default when using SDK rendering.
 /// This function will detect a moderate tap on the Rift via the accelerometer
 /// and dismiss the warning.
-void RiftAppSkeleton::CheckForTapToDismissHealthAndSafetyWarning() const
+void OVRSDK05AppSkeleton::CheckForTapToDismissHealthAndSafetyWarning() const
 {
     // Health and Safety Warning display state.
     ovrHSWDisplayState hswDisplayState;
@@ -386,7 +405,7 @@ void RiftAppSkeleton::CheckForTapToDismissHealthAndSafetyWarning() const
     }
 }
 
-void RiftAppSkeleton::timestep(double absTime, double dt)
+void OVRSDK05AppSkeleton::timestep(double absTime, double dt)
 {
     AppSkeleton::timestep(absTime, dt);
 
@@ -397,38 +416,7 @@ void RiftAppSkeleton::timestep(double absTime, double dt)
 #endif
 }
 
-// Store HMD position and direction for gaze tracking in timestep.
-// OVR SDK requires head pose be queried between ovrHmd_BeginFrameTiming and ovrHmd_EndFrameTiming.
-// Don't worry - we're just writing to _mutable_ members, it's still const!
-void RiftAppSkeleton::_StoreHmdPose(const ovrPosef& eyePose) const
-{
-    m_hmdRo.x = eyePose.Position.x + m_chassisPos.x;
-    m_hmdRo.y = eyePose.Position.y + m_chassisPos.y;
-    m_hmdRo.z = eyePose.Position.z + m_chassisPos.z;
-
-    const glm::mat4 w2eye = makeWorldToChassisMatrix() * makeMatrixFromPose(eyePose);
-    const OVR::Matrix4f rotmtx = makeOVRMatrixFromGlmMatrix(w2eye);
-    const OVR::Vector4f lookFwd(0.f, 0.f, -1.f, 0.f);
-    const OVR::Vector4f rotvec = rotmtx.Transform(lookFwd);
-    m_hmdRd.x = rotvec.x;
-    m_hmdRd.y = rotvec.y;
-    m_hmdRd.z = rotvec.z;
-
-    // Store a separate copy of (ro,rd) in local space without chassis txfms applied.
-    m_hmdRoLocal.x = eyePose.Position.x;
-    m_hmdRoLocal.y = eyePose.Position.y;
-    m_hmdRoLocal.z = eyePose.Position.z;
-
-    const OVR::Matrix4f rotmtxLocal = OVR::Matrix4f(eyePose.Orientation);
-    const OVR::Vector4f rotvecLocal = rotmtxLocal.Transform(OVR::Vector4f(0.0f, 0.0f, -1.0f, 0.0f));
-    m_hmdRdLocal.x = rotvecLocal.x;
-    m_hmdRdLocal.y = rotvecLocal.y;
-    m_hmdRdLocal.z = rotvecLocal.z;
-
-    m_eyePoseCached = eyePose; // cache this for movement direction
-}
-
-void RiftAppSkeleton::display_stereo_undistorted() const
+void OVRSDK05AppSkeleton::display_stereo_undistorted() const
 {
     ovrHmd hmd = m_Hmd;
     if (hmd == NULL)
@@ -480,7 +468,6 @@ void RiftAppSkeleton::display_stereo_undistorted() const
 
         const ovrPosef eyePose = outEyePoses[e];
         m_eyePoseCached = eyePose; // cache this for movement direction
-        _StoreHmdPose(eyePose);
         const glm::mat4 viewLocal = makeMatrixFromPose(eyePose);
         const glm::mat4 viewWorld = makeWorldToChassisMatrix() * viewLocal;
 
@@ -519,7 +506,7 @@ void RiftAppSkeleton::display_stereo_undistorted() const
     glUseProgram(0);
 }
 
-void RiftAppSkeleton::display_sdk() const
+void OVRSDK05AppSkeleton::display_sdk() const
 {
     ovrHmd hmd = m_Hmd;
     if (hmd == NULL)
@@ -557,7 +544,6 @@ void RiftAppSkeleton::display_sdk() const
         renderPose[e] = eyePose;
         eyeTexture[e] = m_EyeTexture[e].Texture;
         m_eyePoseCached = eyePose; // cache this for movement direction
-        _StoreHmdPose(eyePose);
 
         const ovrGLTexture& otex = m_EyeTexture[e];
         const ovrRecti& rvp = otex.OGL.Header.RenderViewport;
@@ -599,7 +585,7 @@ void RiftAppSkeleton::display_sdk() const
     glUseProgram(0);
 }
 
-void RiftAppSkeleton::display_client() const
+void OVRSDK05AppSkeleton::display_client() const
 {
     const ovrHmd hmd = m_Hmd;
     if (hmd == NULL)
@@ -645,7 +631,6 @@ void RiftAppSkeleton::display_client() const
 
         const ovrPosef eyePose = outEyePoses[eye];
         m_eyePoseCached = eyePose; // cache this for movement direction
-        _StoreHmdPose(eyePose);
         const glm::mat4 viewLocal = makeMatrixFromPose(eyePose);
         const glm::mat4 viewWorld = makeWorldToChassisMatrix() * viewLocal;
 

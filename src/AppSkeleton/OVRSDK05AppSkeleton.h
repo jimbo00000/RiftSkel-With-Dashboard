@@ -1,4 +1,4 @@
-// RiftAppSkeleton.h
+// OVRSDK05AppSkeleton.h
 
 #pragma once
 
@@ -20,11 +20,11 @@
 
 ///@brief Encapsulates as much of the VR viewer state as possible,
 /// pushing all viewer-independent stuff to Scene.
-class RiftAppSkeleton : public AppSkeleton
+class OVRSDK05AppSkeleton : public AppSkeleton
 {
 public:
-    RiftAppSkeleton();
-    virtual ~RiftAppSkeleton();
+    OVRSDK05AppSkeleton();
+    virtual ~OVRSDK05AppSkeleton();
 
     void initHMD();
     void initVR(bool swapBackBufferDims = false);
@@ -68,7 +68,6 @@ protected:
     virtual glm::ivec2 getRTSize() const;
 
     virtual glm::mat4 makeWorldToEyeMatrix() const;
-    void _StoreHmdPose(const ovrPosef& eyePose) const;
 
     ovrHmd m_Hmd;
     ovrFovPort m_EyeFov[2];
@@ -88,6 +87,6 @@ protected:
     char m_logUserData[256];
 
 private: // Disallow copy ctor and assignment operator
-    RiftAppSkeleton(const RiftAppSkeleton&);
-    RiftAppSkeleton& operator=(const RiftAppSkeleton&);
+    OVRSDK05AppSkeleton(const OVRSDK05AppSkeleton&);
+    OVRSDK05AppSkeleton& operator=(const OVRSDK05AppSkeleton&);
 };
