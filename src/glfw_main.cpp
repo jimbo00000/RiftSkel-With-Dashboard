@@ -519,13 +519,36 @@ void mouseWheel(GLFWwindow* pWindow, double x, double y)
     (void)pWindow;
     (void)x;
 
+#if 0
     const int delta = static_cast<int>(y);
-    const float curscale = g_app.GetFBOScale();
     const float incr = 1.05f;
-    g_app.SetFBOScale(curscale * pow(incr, static_cast<float>(delta)));
     if (fabs(x) > 0.)
     {
+        // "Comfort mode" turning, kind of lame
         g_app.OnMouseWheel(x,y);
+    }
+#endif
+
+    const float delta = static_cast<float>(y);
+    const float incr = 0.05f;
+
+    if (which_button == GLFW_MOUSE_BUTTON_RIGHT)
+    {
+        float fbosc = g_app.GetFBOScale();
+        fbosc += incr * delta;
+        fbosc = std::max(.15f, fbosc);
+        fbosc = std::min(1.f, fbosc);
+        g_app.SetFBOScale(fbosc);
+    }
+    else
+    {
+#if 0
+        float cscope = g_app.m_cinemaScopeFactor;
+        cscope += incr * delta;
+        cscope = std::max(0.0f, cscope);
+        cscope = std::min(0.95f, cscope);
+        g_app.m_cinemaScopeFactor = cscope;
+#endif
     }
 }
 
