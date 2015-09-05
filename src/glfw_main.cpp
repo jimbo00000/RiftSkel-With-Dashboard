@@ -144,6 +144,23 @@ void keyboard(GLFWwindow* pWindow, int key, int codes, int action, int mods)
     const float f = 0.9f;
     const float ff = 0.99f;
 
+    switch (key)
+    {
+        default: break;
+        case GLFW_KEY_BACKSLASH:
+            {
+                if      (action==GLFW_PRESS  ) g_app.m_dashScene.SendMouseClick(1);
+                else if (action==GLFW_RELEASE) g_app.m_dashScene.SendMouseClick(0);
+            }
+            break;
+        case GLFW_KEY_SLASH:
+            {
+                if      (action==GLFW_PRESS  ) g_app.m_dashScene.SetHoldingFlag(1);
+                else if (action==GLFW_RELEASE) g_app.m_dashScene.SetHoldingFlag(0);
+            }
+            break;
+    }
+
     if (action == GLFW_PRESS)
     {
     switch (key)
@@ -191,7 +208,6 @@ void keyboard(GLFWwindow* pWindow, int key, int codes, int action, int mods)
         case GLFW_KEY_DELETE: g_dynamicallyScaleFBO = !g_dynamicallyScaleFBO; break;
 
         case '`':
-#if defined(OVRSDK05)
             ///@todo Is there a way to create an auxiliary window in Direct to rift mode?
             /// The call to glfwCreateWindow crashes the app in Win7.
             if (
@@ -210,7 +226,17 @@ void keyboard(GLFWwindow* pWindow, int key, int codes, int action, int mods)
                     glfwMakeContextCurrent(g_pHMDWindow);
                 }
             }
-#endif
+            break;
+
+        case GLFW_KEY_TAB:
+            if (g_app.UsingDebugHmd() == false)
+            {
+                g_app.m_dashScene.m_bDraw = !g_app.m_dashScene.m_bDraw;
+                if (g_app.m_dashScene.m_bDraw)
+                {
+                    g_app.m_dashScene.ResizeTweakbar();
+                }
+            }
             break;
 
         case GLFW_KEY_SPACE:
