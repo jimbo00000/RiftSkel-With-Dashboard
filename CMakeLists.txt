@@ -27,6 +27,8 @@ ENDIF()
 
 ADD_DEFINITIONS( -DPROJECT_NAME="${PROJECT_NAME}" )
 
+MESSAGE( "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}" )
+
 #
 # Platform-dependent section
 #
@@ -246,9 +248,17 @@ ELSEIF( APPLE )
         # TODO: SDL2 or glfw
 
 ELSEIF( UNIX )
-    ADD_DEFINITIONS( -D_LINUX )
+    ADD_DEFINITIONS( -D_UNIX )
+    IF( CMAKE_SYSTEM_NAME STREQUAL "Linux" )
+        ADD_DEFINITIONS( -D_LINUX )
+    ELSEIF( CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" )
+        ADD_DEFINITIONS( -D_FREEBSD )
+        INCLUDE_DIRECTORIES( /usr/local/include )
+        LINK_DIRECTORIES( /usr/local/lib )
+    ENDIF()
+
     SET( LIBS_HOME "~/lib" )
-    
+
     ADD_DEFINITIONS( -D_DEBUG )
     SET(CMAKE_CXX_FLAGS "-ggdb")
     SET(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
@@ -263,7 +273,7 @@ ELSEIF( UNIX )
         SET( FRAMEWORK_LIBS -lglfw3 )
     ELSEIF( GL_FRAMEWORK STREQUAL "SDL" )
         MESSAGE("Using SDL2 Framework.")
-        INCLUDE_DIRECTORIES( "/usr/local/include/SDL2" )
+        INCLUDE_DIRECTORIES( "/usr/local/include/SDL2" "/usr/include/SDL2/" )
         LINK_DIRECTORIES   ( "/usr/local/lib/" )
         SET( FRAMEWORK_LIBS -lSDL2 )
     ELSEIF( GL_FRAMEWORK STREQUAL "SFML" )
@@ -303,7 +313,7 @@ ELSEIF( UNIX )
         SET( ANTTWEAKBAR_ROOT "${LIBS_HOME}/AntTweakBar" CACHE STRING "AntTweakBar root" )
         INCLUDE_DIRECTORIES( "${ANTTWEAKBAR_ROOT}/include" )
         LINK_DIRECTORIES   ( "${ANTTWEAKBAR_ROOT}/lib" )
-        SET( ANT_LIBS libAntTweakBar.a )
+        SET( ANT_LIBS libAntTweakBar.so )
         ADD_DEFINITIONS( -DUSE_ANTTWEAKBAR )
     ENDIF( USE_ANTTWEAKBAR )
 
