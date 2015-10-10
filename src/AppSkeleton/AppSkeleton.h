@@ -32,7 +32,6 @@ public:
     virtual ~AppSkeleton();
 
     void ResetChassisTransformations();
-    void initGL();
     void _DrawScenes(const float* pMvWorld, const float* pPersp, const float* pMvLocal=NULL) const;
 
     void pre_render_pass() const;
@@ -41,6 +40,7 @@ public:
     virtual void timestep(double absTime, double dt);
     void resize(int w, int h);
 
+    virtual void initGL();
     virtual void OnMouseButton(int,int);
     virtual void OnMouseMove(int,int);
     virtual void OnMouseWheel(double,double);
@@ -49,7 +49,7 @@ public:
     GLuint getRenderBufferTex() const { return m_renderBuffer.tex; }
     float GetFboScale() const { return m_fboScale; }
 
-    // These vestigial functions match the entry points in RiftAppSkeleton.
+    // These vestigial functions match the entry points in OVRSDK05AppSkeleton.
     // Having them here is ugly, but doesn't seem as bad as a ton of #ifdefs in main.
     void initVR(bool swapBackBufferDims=false) {}
     void exitVR() {}
@@ -81,7 +81,7 @@ public:
 #endif
 
 protected:
-    void _initPresentFbo();
+    void _initPresentFbo(ShaderWithVariables& pres, bool rotateForPortrait = false);
     void _resetGLState() const;
     void _drawSceneMono() const;
     void _checkSceneIntersections(glm::vec3 origin, glm::vec3 dir);

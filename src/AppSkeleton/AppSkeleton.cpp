@@ -105,7 +105,7 @@ void AppSkeleton::initGL()
     }
 
     m_presentFbo.initProgram("presentfbo");
-    _initPresentFbo();
+    _initPresentFbo(m_presentFbo);
     m_presentDistMeshL.initProgram("presentmesh");
     m_presentDistMeshR.initProgram("presentmesh");
     // Init the present mesh VAO *after* initVR, which creates the mesh
@@ -118,9 +118,9 @@ void AppSkeleton::initGL()
 }
 
 
-void AppSkeleton::_initPresentFbo()
+void AppSkeleton::_initPresentFbo(ShaderWithVariables& pres, bool rotateForPortrait)
 {
-    m_presentFbo.bindVAO();
+    pres.bindVAO();
 
     const float verts[] = {
         -1, -1,
@@ -128,35 +128,50 @@ void AppSkeleton::_initPresentFbo()
         1, 1,
         -1, 1
     };
-    const float texs[] = {
+
+    // These tex coords output 1920x1080 aligned to screen pixel coordinates
+    // with no transformation. However, since the display scans out along its
+    // longer axis, setting the screen to landscape mode in Windows's control
+    // panel can introduce extra judder.
+    const float texsLandscape[] = {
         0, 0,
         1, 0,
         1, 1,
         0, 1,
     };
 
+    // These tex coords effectively perform a rotation to output a 1920x1080
+    // FBO to portrait mode screen at 1080x1920.
+    const float texsPortrait[] = {
+        0, 1,
+        0, 0,
+        1, 0,
+        1, 1,
+    };
+    const float* texs = rotateForPortrait ? texsPortrait : texsLandscape;
+
     GLuint vertVbo = 0;
     glGenBuffers(1, &vertVbo);
-    m_presentFbo.AddVbo("vPosition", vertVbo);
+    pres.AddVbo("vPosition", vertVbo);
     glBindBuffer(GL_ARRAY_BUFFER, vertVbo);
     glBufferData(GL_ARRAY_BUFFER, 4*2*sizeof(GLfloat), verts, GL_STATIC_DRAW);
-    glVertexAttribPointer(m_presentFbo.GetAttrLoc("vPosition"), 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(pres.GetAttrLoc("vPosition"), 2, GL_FLOAT, GL_FALSE, 0, NULL);
 
     GLuint texVbo = 0;
     glGenBuffers(1, &texVbo);
-    m_presentFbo.AddVbo("vTex", texVbo);
+    pres.AddVbo("vTex", texVbo);
     glBindBuffer(GL_ARRAY_BUFFER, texVbo);
     glBufferData(GL_ARRAY_BUFFER, 4*2*sizeof(GLfloat), texs, GL_STATIC_DRAW);
-    glVertexAttribPointer(m_presentFbo.GetAttrLoc("vTex"), 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glVertexAttribPointer(pres.GetAttrLoc("vTex"), 2, GL_FLOAT, GL_FALSE, 0, NULL);
 
-    glEnableVertexAttribArray(m_presentFbo.GetAttrLoc("vPosition"));
-    glEnableVertexAttribArray(m_presentFbo.GetAttrLoc("vTex"));
+    glEnableVertexAttribArray(pres.GetAttrLoc("vPosition"));
+    glEnableVertexAttribArray(pres.GetAttrLoc("vTex"));
 
-    glUseProgram(m_presentFbo.prog());
+    glUseProgram(pres.prog());
     {
         glm::mat4 id(1.0f);
-        glUniformMatrix4fv(m_presentFbo.GetUniLoc("mvmtx"), 1, false, glm::value_ptr(id));
-        glUniformMatrix4fv(m_presentFbo.GetUniLoc("prmtx"), 1, false, glm::value_ptr(id));
+        glUniformMatrix4fv(pres.GetUniLoc("mvmtx"), 1, false, glm::value_ptr(id));
+        glUniformMatrix4fv(pres.GetUniLoc("prmtx"), 1, false, glm::value_ptr(id));
     }
     glUseProgram(0);
 
@@ -292,6 +307,17 @@ void AppSkeleton::display_buffered(bool setViewport) const
 
 void AppSkeleton::timestep(double absTime, double dt)
 {
+    for (std::vector<IScene*>::iterator it = m_scenes.begin();
+        it != m_scenes.end();
+        ++it)
+    {
+        IScene* pScene = *it;
+        if (pScene != NULL)
+        {
+            pScene->timestep(absTime, dt);
+        }
+    }
+
     glm::vec3 hydraMove = glm::vec3(0.0f, 0.0f, 0.0f);
 #ifdef USE_SIXENSE
     const sixenseAllControllerData& state = m_fm.GetCurrentState();
@@ -359,17 +385,6 @@ void AppSkeleton::timestep(double absTime, double dt)
         dir3 = glm::vec3(chasMat * glm::vec4(dir3, 0.f));
 
         _checkSceneIntersections(origin3, dir3);
-    }
-
-    for (std::vector<IScene*>::iterator it = m_scenes.begin();
-        it != m_scenes.end();
-        ++it)
-    {
-        IScene* pScene = *it;
-        if (pScene != NULL)
-        {
-            pScene->timestep(absTime, dt);
-        }
     }
 }
 

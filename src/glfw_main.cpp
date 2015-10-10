@@ -834,10 +834,7 @@ void destroyAuxiliaryWindow(GLFWwindow* pAuxWindow)
 void GLAPIENTRY myCallback(
     GLenum source, GLenum type, GLuint id, GLenum severity,
     GLsizei length, const GLchar *msg,
-#ifndef _LINUX
-    const
-#endif
-    void *data)
+    const void *data)
 {
     switch (severity)
     {
@@ -857,6 +854,7 @@ int main(int argc, char** argv)
     LOG_INFO("Windows build.");
 #elif defined(_LINUX)
     LOG_INFO("Linux build.");
+    LOG_INFO("DISPLAY=%s", getenv("DISPLAY"));
 #elif defined(_MACOS)
     LOG_INFO("MacOS build.");
 #endif
